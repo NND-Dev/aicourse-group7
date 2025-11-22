@@ -81,15 +81,12 @@
             <label>Model</label>
             <select id="model">
               <!-- Replace with models available to your account -->
-               <!--
+              <option value="GPT-5.1">GPT-5.1</option>
               <option value="gpt-4o-mini">gpt-4o-mini</option>
               <option value="gpt-4o">gpt-4o</option>
               <option value="gpt-4.1-mini">gpt-4.1-mini</option>
               <option value="gpt-4.1">gpt-4.1</option>
-              <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-              -->
-              <option value="GPT-5.1">GPT-5.1</option>
-              
+              <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>  
             </select>
           </div>
           <div class="row" style="gap:6px;">
@@ -99,7 +96,31 @@
           </div>
           <div class="row grow" style="gap:6px;">
             <label class="grow">System Prompt</label>
-            <input id="system" class="grow" placeholder="You are a helpful assistant." />
+            <input id="system" class="grow" placeholder="You are an expert travel planning assistant. You help users:
+1. Discover destinations based on their preferences
+2. Suggest activities and attractions
+3. Check weather and best times to visit
+4. Create detailed travel itineraries
+
+Be conversational, friendly, and provide specific, actionable advice.
+When suggesting destinations or activities, include:
+- Why it's a good match for their preferences
+- Estimated costs
+- Best times to visit
+- Weather considerations
+- Practical tips" value="You are an expert travel planning assistant. You help users:
+1. Discover destinations based on their preferences
+2. Suggest activities and attractions
+3. Check weather and best times to visit
+4. Create detailed travel itineraries
+
+Be conversational, friendly, and provide specific, actionable advice.
+When suggesting destinations or activities, include:
+- Why it's a good match for their preferences
+- Estimated costs
+- Best times to visit
+- Weather considerations
+- Practical tips"/>
           </div>
         </div>
       </div>
@@ -158,6 +179,9 @@
       msg.className = `msg ${role}`;
       msg.innerHTML = `
         <div class="avatar">${role === 'user' ? 'U' : 'AI'}</div>
+       
+
+        
         <div class="content">${renderMarkdown(content)}</div>
       `;
       messagesEl.appendChild(msg);
@@ -334,6 +358,18 @@
         sendMessage();
       }
     });
+
+
+  function playTTS(text, lang = 'en') {
+
+      // const audio = new Audio(
+      //   `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=tw-ob`
+      // );
+      // audio.play();
+  }
+
+// Example usage
+//playTTS("Hello world", "en");
   </script>
 </body>
 </html>
