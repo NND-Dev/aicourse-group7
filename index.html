@@ -1,0 +1,339 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>OpenAI Chat UI (Streaming)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #22c55e;
+      --border: #1f2937;
+      --bubble-user: #1e293b;
+      --bubble-assistant: #0b1020;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    .app {
+      max-width: 960px; margin: 0 auto; padding: 16px;
+      display: grid; grid-template-columns: 1fr; gap: 12px;
+    }
+    header {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+    }
+    header h1 { font-size: 1.1rem; margin: 0; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    label { font-size: 0.85rem; color: var(--muted); }
+    input, select, textarea, button {
+      background: #0b1020; color: var(--text); border: 1px solid var(--border);
+      padding: 8px 10px; border-radius: 10px; font-size: 0.95rem;
+    }
+    input[type="range"] { width: 160px; }
+    .grow { flex: 1; }
+    .messages {
+      border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+      padding: 12px; min-height: 420px; max-height: 60vh; overflow: auto;
+    }
+    .msg { display: grid; grid-template-columns: 56px 1fr; gap: 12px; padding: 12px; border-radius: 12px; margin-bottom: 10px; }
+    .msg.user { background: var(--bubble-user); }
+    .msg.assistant { background: var(--bubble-assistant); }
+    .avatar {
+      width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-weight: 600;
+      background: #0b1020; border: 1px solid var(--border);
+    }
+    .content pre, .content code {
+      background: #0b1020; border: 1px solid var(--border); border-radius: 8px; padding: 10px; overflow: auto;
+    }
+    .footer {
+      display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start;
+    }
+    .input-area { display: grid; gap: 8px; }
+    .actions { display: flex; gap: 8px; align-items: center; }
+    .btn {
+      background: var(--accent); border: none; color: #06120a; font-weight: 700; cursor: pointer; padding: 10px 14px; border-radius: 10px;
+    }
+    .btn.secondary { background: #0b1020; color: var(--text); border: 1px solid var(--border); }
+    .hint { color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>OpenAI Chat UI</h1>
+      <div class="row grow">
+        <div class="row" style="gap:12px; width:100%;">
+          <div class="row" style="gap:6px;">
+            <label>Provider</label>
+            <select id="provider">
+              <option value="openai" selected>OpenAI</option>
+              <!--<option value="azure">Azure OpenAI</option> -->
+            </select>
+          </div>
+          <div class="row" style="gap:6px;">
+            <label>Model</label>
+            <select id="model">
+              <!-- Replace with models available to your account -->
+               <!--
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+              <option value="gpt-4.1">gpt-4.1</option>
+              <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+              -->
+              <option value="GPT-5.1">GPT-5.1</option>
+              
+            </select>
+          </div>
+          <div class="row" style="gap:6px;">
+            <label>Temperature</label>
+            <input type="range" id="temperature" min="0" max="2" step="0.1" value="1.0" />
+            <span id="tempVal" class="hint">1.0</span>
+          </div>
+          <div class="row grow" style="gap:6px;">
+            <label class="grow">System Prompt</label>
+            <input id="system" class="grow" placeholder="You are a helpful assistant." />
+          </div>
+        </div>
+      </div>
+      <div class="row grow">
+        <input id="apiKey" class="grow" type="password" placeholder="API Key (Dev only; use a server proxy in production)" />
+      </div>
+      <div class="row grow" id="azureSettings" style="display:none; gap:8px;">
+        <input id="azureEndpoint" class="grow" placeholder="Azure Endpoint (e.g. https://<resource>.openai.azure.com/)" />
+        <input id="azureDeployment" class="grow" placeholder="Azure Deployment name (e.g. gpt-4o)" />
+        <input id="azureApiVersion" placeholder="2024-08-01-preview" value="2024-08-01-preview" />
+      </div>
+    </header>
+
+    <section class="messages" id="messages"></section>
+
+    <section class="footer">
+      <div class="input-area">
+        <textarea id="userInput" rows="3" placeholder="Type your message... (Shift+Enter = newline, Enter = send)"></textarea>
+        <span class="hint">Pro tip: Use a backend proxy to keep API keys out of the browser.</span>
+      </div>
+      <div class="actions">
+        <button class="btn" id="sendBtn">Send</button>
+        <button class="btn secondary" id="resetBtn">Reset</button>
+        <button class="btn secondary" id="exportBtn">Export JSON</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const userInputEl = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const modelEl = document.getElementById('model');
+    const tempEl = document.getElementById('temperature');
+    const tempVal = document.getElementById('tempVal');
+    const systemEl = document.getElementById('system');
+    const apiKeyEl = document.getElementById('apiKey');
+    const providerEl = document.getElementById('provider');
+    const azureSettingsEl = document.getElementById('azureSettings');
+    const azureEndpointEl = document.getElementById('azureEndpoint');
+    const azureDeploymentEl = document.getElementById('azureDeployment');
+    const azureApiVersionEl = document.getElementById('azureApiVersion');
+
+    let chatHistory = [];
+
+    tempEl.addEventListener('input', () => tempVal.textContent = tempEl.value);
+    providerEl.addEventListener('change', () => {
+      azureSettingsEl.style.display = providerEl.value === 'azure' ? 'flex' : 'none';
+    });
+
+    function addMessage(role, content) {
+      chatHistory.push({ role, content });
+      const msg = document.createElement('div');
+      msg.className = `msg ${role}`;
+      msg.innerHTML = `
+        <div class="avatar">${role === 'user' ? 'U' : 'AI'}</div>
+        <div class="content">${renderMarkdown(content)}</div>
+      `;
+      messagesEl.appendChild(msg);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function updateLastAssistantChunk(chunk) {
+      const items = messagesEl.querySelectorAll('.msg.assistant .content');
+      const target = items[items.length - 1];
+      if (target) target.innerHTML = renderMarkdown(chunk);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function renderMarkdown(text) {
+      const esc = (s) => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      let html = esc(text)
+        .replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${esc(code)}</code></pre>`)
+        .replace(/\n/g, '<br/>');
+      return html;
+    }
+
+    function systemMessage() {
+      const sys = systemEl.value?.trim();
+      return sys ? [{ role: 'system', content: sys }] : [];
+    }
+
+    async function sendMessage() {
+      const text = userInputEl.value.trim();
+      if (!text) return;
+      addMessage('user', text);
+      userInputEl.value = '';
+      const model = modelEl.value;
+      const temperature = parseFloat(tempEl.value);
+      const provider = providerEl.value;
+      const apiKey = apiKeyEl.value.trim();
+      if (!apiKey) {
+        alert('Please enter your API key (for demo). In production, use a proxy backend.');
+        return;
+      }
+
+      addMessage('assistant', '');
+
+      try {
+        if (provider === 'openai') {
+          await streamOpenAI({
+            apiKey, model, temperature,
+            messages: [...systemMessage(), ...chatHistory.filter(m => m.role !== 'assistant' || m.content)]
+          });
+        } else {
+          await streamAzureOpenAI({
+            apiKey,
+            endpoint: azureEndpointEl.value.trim(),
+            deployment: azureDeploymentEl.value.trim(),
+            apiVersion: azureApiVersionEl.value.trim(),
+            temperature,
+            messages: [...systemMessage(), ...chatHistory.filter(m => m.role !== 'assistant' || m.content)]
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        updateLastAssistantChunk(`Error: ${String(err?.message || err)}`);
+      }
+    }
+
+    async function streamOpenAI({ apiKey, model, temperature, messages }) {
+      const body = {
+        model,
+        temperature,
+        stream: true,
+        messages: messages.map(m => ({ role: m.role, content: m.content }))
+      };
+      // https://api.openai.com/v1/chat/completions
+      const res = await fetch('https://aiportalapi.stu-platform.live/use/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`OpenAI HTTP ${res.status}: ${errText}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      let full = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+
+        const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+        for (const line of lines) {
+          const payload = line.replace(/^data:\s*/, '');
+          if (payload === '[DONE]') continue;
+          try {
+            const data = JSON.parse(payload);
+            const delta = data.choices?.[0]?.delta?.content ?? '';
+            if (delta) {
+              full += delta;
+              updateLastAssistantChunk(full);
+            }
+          } catch (e) {}
+        }
+      }
+      chatHistory.push({ role: 'assistant', content: full });
+    }
+
+    async function streamAzureOpenAI({ apiKey, endpoint, deployment, apiVersion, temperature, messages }) {
+      if (!endpoint || !deployment || !apiVersion) {
+        throw new Error('Azure settings missing: endpoint, deployment, apiVersion are required.');
+      }
+      const url = `${endpoint}openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
+      const body = {
+        temperature,
+        stream: true,
+        messages: messages.map(m => ({ role: m.role, content: m.content }))
+      };
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Azure OpenAI HTTP ${res.status}: ${errText}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      let full = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+
+        const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+        for (const line of lines) {
+          const payload = line.replace(/^data:\s*/, '');
+          if (payload === '[DONE]') continue;
+          try {
+            const data = JSON.parse(payload);
+            const delta = data.choices?.[0]?.delta?.content ?? '';
+            if (delta) {
+              full += delta;
+              updateLastAssistantChunk(full);
+            }
+          } catch (e) {}
+        }
+      }
+      chatHistory.push({ role: 'assistant', content: full });
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    resetBtn.addEventListener('click', () => {
+      chatHistory = [];
+      messagesEl.innerHTML = '';
+    });
+    exportBtn.addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(chatHistory, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'chat_history.json'; a.click();
+      URL.revokeObjectURL(url);
+    });
+    userInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>

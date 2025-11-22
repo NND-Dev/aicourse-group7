@@ -28,6 +28,8 @@ pip install -r requirements.txt
 
 ```bash
 python main.py
+python main1.py
+python main2.py
 ```
 
 ### 3. Sử dụng
